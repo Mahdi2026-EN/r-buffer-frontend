@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe7ff;
+  --color-brand-200: #bcd2ff;
+  --color-brand-300: #8eb2ff;
+  --color-brand-400: #5d8aff;
+  --color-brand-500: #3a66f5;
+  --color-brand-600: #2649d6;
+  --color-brand-700: #1e3aa8;
+  --color-brand-800: #1c3384;
+  --color-brand-900: #1a2e6a;
+
+  --color-ink-50: #f6f7f9;
+  --color-ink-100: #eceff3;
+  --color-ink-200: #d5dae3;
+  --color-ink-300: #aeb6c4;
+  --color-ink-400: #828ea3;
+  --color-ink-500: #5f6b80;
+  --color-ink-600: #4a5468;
+  --color-ink-700: #3a4256;
+  --color-ink-800: #2a313f;
+  --color-ink-900: #161a23;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: "Inter", "Vazirmatn", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f6f7f9;
+  color: #161a23;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html[dir="rtl"] body {
+  font-family: "Vazirmatn", "Inter", system-ui, sans-serif;
+}
+
+/* Recharts text fix */
+.recharts-text {
+  fill: #4a5468;
+  font-size: 12px;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d5dae3;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #aeb6c4;
+}
+
+/* Subtle focus rings */
+:focus-visible {
+  outline: 2px solid #3a66f5;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Smooth fade-in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeIn 0.25s ease-out;
+}
