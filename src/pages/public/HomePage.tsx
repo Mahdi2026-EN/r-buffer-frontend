@@ -11,16 +11,25 @@ import {
 } from "lucide-react";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Button } from "../../components/ui/Button";
-import { mockAnnouncements, mockCategories, mockProducts } from "../../services/mockData";
+import { categoryService, contentService, productService } from "../../services/api";
+import type { Announcement, Category, Product } from "../../types";
 import { ProductCard } from "../../components/public/ProductCard";
 import { CategoryCard } from "../../components/public/CategoryCard";
 import { AnnouncementCard } from "../../components/public/AnnouncementCard";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "../../utils/cn";
 
 export function HomePage() {
   const { t } = useI18n();
-  const featured = mockProducts.filter((p) => p.featured).slice(0, 4);
+  const [featured, setFeatured] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+
+  useEffect(() => {
+    productService.list().then((all) => setFeatured(all.filter((p) => p.featured).slice(0, 4))).catch(() => undefined);
+    categoryService.listPublic().then(setCategories).catch(() => undefined);
+    contentService.getAnnouncements().then(setAnnouncements).catch(() => undefined);
+  }, []);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   const steps = [
@@ -160,7 +169,7 @@ export function HomePage() {
             <p className="mt-2 text-sm text-ink-500">{t("home.categoriesSub")}</p>
           </div>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {mockCategories.slice(0, 6).map((c) => (
+            {categories.slice(0, 6).map((c) => (
               <CategoryCard key={c.id} category={c} />
             ))}
           </div>
@@ -224,7 +233,7 @@ export function HomePage() {
           </Link>
         </div>
         <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {mockAnnouncements.slice(0, 3).map((a) => (
+          {announcements.slice(0, 3).map((a) => (
             <AnnouncementCard key={a.id} announcement={a} />
           ))}
         </div>

@@ -7,7 +7,6 @@ import { StatusBadge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
 import { DataTable, type Column } from "../../components/admin/DataTable";
-import { mockUsers } from "../../services/mockData";
 import { paymentRequestService } from "../../services/api";
 import type { PaymentRequest } from "../../types";
 import { Pagination } from "../../components/ui/Pagination";
@@ -24,7 +23,7 @@ export function AdminPaymentRequestsPage() {
   const pageSize = 6;
 
   useEffect(() => {
-    paymentRequestService.list().then(setItems);
+    paymentRequestService.list().then(setItems).catch(() => undefined);
   }, []);
 
   const methodLabel = (m: PaymentRequest["method"]) =>
@@ -35,8 +34,7 @@ export function AdminPaymentRequestsPage() {
 
   const filtered = items.filter((p) => {
     if (status && p.status !== status) return false;
-    const u = mockUsers.find((u) => u.id === p.userId);
-    if (search && !`${u?.fullName} ${p.reference}`.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !`${p.userName} ${p.reference}`.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -64,15 +62,12 @@ export function AdminPaymentRequestsPage() {
     {
       key: "user",
       header: t("admin.user"),
-      cell: (p) => {
-        const u = mockUsers.find((u) => u.id === p.userId);
-        return (
-          <div>
-            <p className="font-medium text-ink-900">{u?.fullName}</p>
-            <p className="text-xs text-ink-500">{u?.email}</p>
-          </div>
-        );
-      },
+      cell: (p) => (
+        <div>
+          <p className="font-medium text-ink-900">{p.userName}</p>
+          <p className="text-xs text-ink-500">{p.userEmail}</p>
+        </div>
+      ),
     },
     { key: "amount", header: t("admin.amount"), cell: (p) => <span className="font-semibold">+{p.amount}</span> },
     { key: "method", header: t("admin.method"), cell: (p) => methodLabel(p.method) },
@@ -139,7 +134,7 @@ export function AdminPaymentRequestsPage() {
         open={!!confirm}
         onClose={() => setConfirm(null)}
         title={confirm?.type === "approve" ? t("admin.approve") : t("admin.reject")}
-        description={confirm?.item ? `${mockUsers.find((u) => u.id === confirm.item.userId)?.fullName} · +${confirm.item.amount}` : ""}
+        description={confirm?.item ? `${confirm.item.userName} · +${confirm.item.amount}` : ""}
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="outline" size="md" onClick={() => setConfirm(null)}>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Save } from "lucide-react";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
@@ -8,6 +8,8 @@ import { Select } from "../../components/ui/Input";
 import { cn } from "../../utils/cn";
 import { useToast } from "../../components/ui/Toast";
 import type { Locale } from "../../i18n/types";
+import { settingsService } from "../../services/api";
+import { ApiError } from "../../services/http";
 
 type Tab = "general" | "localization" | "appearance" | "system";
 
@@ -15,13 +17,39 @@ export function AdminSettingsPage() {
   const { t } = useI18n();
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("general");
-  const [general, setGeneral] = useState({ siteName: "R-Buffer", email: "support@rbuffer.io", phone: "+93 700 000 000" });
+  const [general, setGeneral] = useState({ siteName: "", email: "", phone: "" });
   const [loc, setLoc] = useState<{ default: Locale; supported: Locale[] }>({ default: "en", supported: ["en", "fa", "ps"] });
-  const [appearance, setAppearance] = useState({ theme: "light" });
+  const [appearance, setAppearance] = useState<{ theme: "light" | "dark" | "auto" }>({ theme: "light" });
   const [system, setSystem] = useState({ notifications: true });
+  const [saving, setSaving] = useState(false);
 
-  function save() {
-    toast(t("admin.settingsTab.saveBtn"), "success");
+  useEffect(() => {
+    settingsService.get().then((s) => {
+      setGeneral({ siteName: s.siteName, email: s.contactEmail, phone: s.contactPhone });
+      setLoc({ default: s.defaultLanguage, supported: s.supportedLanguages });
+      setAppearance({ theme: s.theme });
+      setSystem({ notifications: s.enableNotifications });
+    }).catch(() => undefined);
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await settingsService.update({
+        siteName: general.siteName,
+        contactEmail: general.email,
+        contactPhone: general.phone,
+        defaultLanguage: loc.default,
+        supportedLanguages: loc.supported,
+        theme: appearance.theme,
+        enableNotifications: system.notifications,
+      });
+      toast(t("admin.success"), "success");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not save the settings.", "error");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const tabs: { key: Tab; label: string }[] = [
@@ -64,7 +92,7 @@ export function AdminSettingsPage() {
                 <Input label={t("admin.settingsTab.siteName")} value={general.siteName} onChange={(e) => setGeneral({ ...general, siteName: e.target.value })} />
                 <Input label="Email" type="email" value={general.email} onChange={(e) => setGeneral({ ...general, email: e.target.value })} />
                 <Input label="Phone" value={general.phone} onChange={(e) => setGeneral({ ...general, phone: e.target.value })} />
-                <Button variant="primary" size="md" leftIcon={<Save className="h-4 w-4" />} onClick={save}>{t("admin.settingsTab.saveBtn")}</Button>
+                <Button variant="primary" size="md" leftIcon={<Save className="h-4 w-4" />} onClick={save} loading={saving}>{t("admin.settingsTab.saveBtn")}</Button>
               </CardBody>
             </Card>
           )}

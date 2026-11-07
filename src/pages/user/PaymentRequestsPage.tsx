@@ -5,21 +5,19 @@ import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { StatusBadge } from "../../components/ui/Badge";
 import { EmptyState } from "../../components/ui/States";
-import { mockUsers } from "../../services/mockData";
 import { paymentRequestService } from "../../services/api";
 import type { PaymentRequest } from "../../types";
 import { Pagination } from "../../components/ui/Pagination";
 
 export function PaymentRequestsPage() {
   const { t } = useI18n();
-  const user = mockUsers[0];
   const [items, setItems] = useState<PaymentRequest[]>([]);
   const [page, setPage] = useState(1);
   const pageSize = 6;
 
   useEffect(() => {
-    paymentRequestService.listByUser(user.id).then(setItems);
-  }, [user.id]);
+    paymentRequestService.listMine().then(setItems).catch(() => undefined);
+  }, []);
 
   const methodLabel = (m: PaymentRequest["method"]) =>
     m === "cash" ? t("credit.methodCash") : m === "card" ? t("credit.methodCard") : m === "bank" ? t("credit.methodBank") : t("credit.methodOther");

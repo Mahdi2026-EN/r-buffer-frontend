@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Filter, Search, SlidersHorizontal } from "lucide-react";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Input, Select } from "../../components/ui/Input";
 import { ProductCard } from "../../components/public/ProductCard";
 import { EmptyState } from "../../components/ui/States";
-import { mockCategories, mockProducts } from "../../services/mockData";
+import { categoryService, productService } from "../../services/api";
+import type { Category, Product } from "../../types";
 import { Button } from "../../components/ui/Button";
 type SortOption = "newest" | "priceLow" | "priceHigh" | "name";
 
@@ -16,9 +17,21 @@ export function ProductsPage() {
   const [minPrice, setMinPrice] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([productService.list(), categoryService.listPublic()])
+      .then(([p, c]) => {
+        setProducts(p);
+        setCategories(c);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const filtered = useMemo(() => {
-    let list = [...mockProducts];
+    let list = [...products];
     if (search) {
       const s = search.toLowerCase();
       list = list.filter((p) =>
@@ -48,11 +61,11 @@ export function ProductsPage() {
         list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
     return list;
-  }, [search, categoryId, sort, minPrice, maxPrice, locale]);
+  }, [products, search, categoryId, sort, minPrice, maxPrice, locale]);
 
   const categoryOptions = [
     { value: "", label: t("products.allCategories") },
-    ...mockCategories.map((c) => ({ value: c.id, label: c.name[locale] })),
+    ...categories.map((c) => ({ value: c.id, label: c.name[locale] })),
   ];
 
   const sortOptions: { value: SortOption; label: string }[] = [
@@ -142,7 +155,9 @@ export function ProductsPage() {
         {filtered.length} {t("pagination.results")}
       </p>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <p className="py-12 text-center text-sm text-ink-500">…</p>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={<Filter className="h-6 w-6" />}
           title={t("products.noResults")}

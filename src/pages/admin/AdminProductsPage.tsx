@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Card, CardBody } from "../../components/ui/Card";
@@ -7,9 +7,8 @@ import { Input, Select, Textarea } from "../../components/ui/Input";
 import { Modal } from "../../components/ui/Modal";
 import { Badge } from "../../components/ui/Badge";
 import { DataTable, type Column } from "../../components/admin/DataTable";
-import { mockCategories, mockProducts } from "../../services/mockData";
-import { productService } from "../../services/api";
-import type { Product } from "../../types";
+import { categoryService, productService } from "../../services/api";
+import type { Category, Product } from "../../types";
 import { Pagination } from "../../components/ui/Pagination";
 import { useToast } from "../../components/ui/Toast";
 
@@ -28,7 +27,13 @@ const blankForm: FormData = {
 export function AdminProductsPage() {
   const { t, locale } = useI18n();
   const { toast } = useToast();
-  const [items, setItems] = useState<Product[]>(mockProducts);
+  const [items, setItems] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+
+  useEffect(() => {
+    productService.listAll().then(setItems).catch(() => undefined);
+    categoryService.list().then(setCategories).catch(() => undefined);
+  }, []);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -109,7 +114,7 @@ export function AdminProductsPage() {
     {
       key: "category",
       header: t("admin.category"),
-      cell: (p) => mockCategories.find((c) => c.id === p.categoryId)?.name[locale] ?? "—",
+      cell: (p) => categories.find((c) => c.id === p.categoryId)?.name[locale] ?? "—",
     },
     { key: "price", header: t("admin.price"), cell: (p) => `${p.price} ${t("products.credits")}` },
     {
@@ -137,7 +142,7 @@ export function AdminProductsPage() {
     },
   ];
 
-  const catOptions = mockCategories.map((c) => ({ value: c.id, label: c.name[locale] }));
+  const catOptions = categories.map((c) => ({ value: c.id, label: c.name[locale] }));
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">

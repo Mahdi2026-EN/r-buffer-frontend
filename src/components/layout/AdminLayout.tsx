@@ -22,6 +22,7 @@ import {
 import { Logo } from "./Logo";
 import { cn } from "../../utils/cn";
 import { useI18n } from "../../i18n/I18nProvider";
+import { authService } from "../../services/auth";
 
 export function AdminLayout() {
   const { t } = useI18n();
@@ -123,7 +124,7 @@ export function AdminLayout() {
                     <Settings className="h-4 w-4" />
                     {t("admin.settings")}
                   </Link>
-                  <button onClick={() => navigate("/")} className="flex w-full items-center gap-2 border-t border-ink-100 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
+                  <button onClick={() => { authService.logout(); navigate("/login"); }} className="flex w-full items-center gap-2 border-t border-ink-100 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
                     <LogOut className="h-4 w-4" />
                     {t("nav.logout")}
                   </button>

@@ -6,6 +6,7 @@ export type AccountStatus = "pending" | "approved" | "denied" | "suspended";
 export type OrderStatus = "pending" | "approved" | "processing" | "completed" | "rejected" | "cancelled";
 export type PaymentStatus = "pending" | "approved" | "rejected";
 export type PaymentMethod = "cash" | "card" | "bank" | "other";
+export type CreditType = "added" | "used";
 
 export interface Category {
   id: string;
@@ -46,6 +47,7 @@ export interface User {
 export interface CreditTransaction {
   id: string;
   userId: string;
+  userName?: string;
   type: "added" | "used";
   amount: number;
   description: string;
@@ -55,6 +57,8 @@ export interface CreditTransaction {
 export interface PaymentRequest {
   id: string;
   userId: string;
+  userName?: string;
+  userEmail?: string;
   amount: number;
   method: PaymentMethod;
   reference: string;
@@ -75,6 +79,9 @@ export interface OrderItem {
 export interface Order {
   id: string;
   userId: string;
+  userName?: string;
+  userEmail?: string;
+  userPhone?: string;
   items: OrderItem[];
   total: number;
   status: OrderStatus;

@@ -36,6 +36,7 @@ import { AdminContentPage } from "./pages/admin/AdminContentPage";
 import { AdminAnnouncementsPage } from "./pages/admin/AdminAnnouncementsPage";
 import { AdminReportsPage } from "./pages/admin/AdminReportsPage";
 import { AdminSettingsPage } from "./pages/admin/AdminSettingsPage";
+import { RequireAuth } from "./components/layout/RequireAuth";
 
 export default function App() {
   return (
@@ -60,18 +61,21 @@ export default function App() {
             <Route path="login" element={<LoginPage />} />
             <Route path="register" element={<RegisterPage />} />
 
-            {/* Customer routes */}
-            <Route element={<DashboardLayout />}>
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="credit" element={<CreditPage />} />
-              <Route path="payment-requests" element={<PaymentRequestsPage />} />
-              <Route path="orders" element={<OrdersPage />} />
-              <Route path="orders/:id" element={<OrderDetailsPage />} />
-              <Route path="notifications" element={<NotificationsPage />} />
-              <Route path="profile" element={<ProfilePage />} />
+            {/* Customer routes (sign-in required) */}
+            <Route element={<RequireAuth role="user" />}>
+              <Route element={<DashboardLayout />}>
+                <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="credit" element={<CreditPage />} />
+                <Route path="payment-requests" element={<PaymentRequestsPage />} />
+                <Route path="orders" element={<OrdersPage />} />
+                <Route path="orders/:id" element={<OrderDetailsPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
+                <Route path="profile" element={<ProfilePage />} />
+              </Route>
             </Route>
 
             {/* Admin routes */}
+            <Route element={<RequireAuth role="admin" />}>
             <Route path="admin" element={<AdminLayout />}>
               <Route index element={<AdminDashboardPage />} />
               <Route path="users" element={<UsersPage />} />
@@ -86,6 +90,7 @@ export default function App() {
               <Route path="announcements" element={<AdminAnnouncementsPage />} />
               <Route path="reports" element={<AdminReportsPage />} />
               <Route path="settings" element={<AdminSettingsPage />} />
+            </Route>
             </Route>
 
             <Route path="*" element={<NotFoundPage />} />

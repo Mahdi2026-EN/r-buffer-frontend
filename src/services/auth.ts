@@ -2,7 +2,7 @@
 import type { User } from "../types";
 import { apiRequest } from "./http";
 
-interface BackendUser {
+export interface BackendUser {
   id: number;
   fullName: string;
   email: string;
@@ -19,7 +19,7 @@ interface LoginResponse {
   user: BackendUser;
 }
 
-function mapBackendUser(raw: BackendUser): User {
+export function mapBackendUser(raw: BackendUser): User {
   const statusMap: Record<string, User["status"]> = {
     PENDING: "pending",
     APPROVED: "approved",
@@ -113,6 +113,28 @@ export const authService = {
     storage.setItem("rbuffer_user", JSON.stringify(user));
 
     return user;
+  },
+
+  // Customer: update my own name and phone
+  async updateProfile(data: { fullName: string; phone: string }) {
+    const response = await apiRequest<BackendUser>(
+      "/users/me",
+      { method: "PATCH", body: JSON.stringify(data) },
+      this.getToken() || undefined,
+    );
+    const user = mapBackendUser(response);
+    const storage = localStorage.getItem("rbuffer_token") ? localStorage : sessionStorage;
+    storage.setItem("rbuffer_user", JSON.stringify(user));
+    return user;
+  },
+
+  // Customer: change my password
+  async changePassword(currentPassword: string, newPassword: string) {
+    await apiRequest<void>(
+      "/users/me/password",
+      { method: "PUT", body: JSON.stringify({ currentPassword, newPassword }) },
+      this.getToken() || undefined,
+    );
   },
 
   getToken() {

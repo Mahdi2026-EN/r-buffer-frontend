@@ -1,284 +1,210 @@
-
-// API service layer — designed to mirror Spring Boot REST endpoints.
-// Categories are now connected to the real Spring Boot backend.
-// Other services remain mock implementations for now.
+// Real API layer: every call goes to the Spring Boot backend.
+// Response shapes match the backend DTOs (status/method/type values are lower case).
 
 import type {
   Announcement,
   Category,
   CmsContent,
+  CreditTransaction,
+  Notification,
   Order,
   PaymentMethod,
   PaymentRequest,
   Product,
   SiteSettings,
   User,
+  AccountStatus,
 } from "../types";
+import { ApiError, apiRequest } from "./http";
+import { authService as session, mapBackendUser, type BackendUser } from "./auth";
 
-import { apiRequest } from "./http";
+export interface AdminStats {
+  totalUsers: number;
+  pendingUsers: number;
+  approvedUsers: number;
+  totalCredit: number;
+  pendingPayments: number;
+  totalOrders: number;
+  pendingOrders: number;
+  completedOrders: number;
+  productsCount: number;
+  daily: {
+    date: string;
+    orders: number;
+    added: number;
+    used: number;
+    registered: number;
+  }[];
+  productActivity: { name: string; value: number }[];
+}
 
-import {
-  mockAnnouncements,
-  mockCategories,
-  mockCmsContent,
-  mockCreditTransactions,
-  mockNotifications,
-  mockOrders,
-  mockPaymentRequests,
-  mockProducts,
-  mockUsers,
-} from "./mockData";
+// Calls that need a signed-in user. An expired or invalid token signs the user out.
+async function authed<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = session.getToken();
 
-// Simulate latency for mock services
-const delay = (ms = 250) => new Promise((r) => setTimeout(r, ms));
+  if (!token) {
+    throw new ApiError("Please sign in to continue.", "UNAUTHENTICATED", 401);
+  }
 
-// =================== Auth ===================
-export const authService = {
-  async login(_email: string, _password: string) {
-    await delay();
-    // Mock - returns a sample user
-    return { user: mockUsers[0], token: "mock-jwt-token" };
-  },
+  try {
+    return await apiRequest<T>(path, init, token);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      session.logout();
+      window.location.href = "/login";
+    }
+    throw error;
+  }
+}
 
-  async register(data: {
-    fullName: string;
-    email: string;
-    phone: string;
-    password: string;
-  }) {
-    await delay();
+const json = (body: unknown): RequestInit => ({
+  method: "POST",
+  body: JSON.stringify(body),
+});
 
-    const newUser: User = {
-      id: `u-${Date.now()}`,
-      fullName: data.fullName,
-      email: data.email,
-      phone: data.phone,
-      status: "pending",
-      role: "user",
-      credit: 0,
-      createdAt: new Date().toISOString(),
-    };
+const patch = (body?: unknown): RequestInit => ({
+  method: "PATCH",
+  body: body === undefined ? undefined : JSON.stringify(body),
+});
 
-    mockUsers.push(newUser);
-    return newUser;
-  },
-
-  async me() {
-    return mockUsers[0];
-  },
-};
+const put = (body: unknown): RequestInit => ({
+  method: "PUT",
+  body: JSON.stringify(body),
+});
 
 // =================== Products ===================
 export const productService = {
-  async list() {
-    await delay();
-    return mockProducts;
+  // Public: available products for the shop
+  async list(): Promise<Product[]> {
+    return apiRequest<Product[]>("/products");
   },
 
-  async getById(id: string) {
-    await delay(150);
-    return mockProducts.find((p) => p.id === id);
+  // Admin: every product, including unavailable ones
+  async listAll(): Promise<Product[]> {
+    return authed<Product[]>("/products/admin");
   },
 
-  async create(data: Omit<Product, "id" | "createdAt">) {
-    await delay();
-
-    const newProduct: Product = {
-      ...data,
-      id: `prod-${Date.now()}`,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-
-    mockProducts.push(newProduct);
-    return newProduct;
+  async getById(id: string): Promise<Product> {
+    return apiRequest<Product>(`/products/${encodeURIComponent(id)}`);
   },
 
-  async update(id: string, data: Partial<Product>) {
-    await delay();
-
-    const idx = mockProducts.findIndex((p) => p.id === id);
-
-    if (idx === -1) {
-      throw new Error("Not found");
-    }
-
-    mockProducts[idx] = { ...mockProducts[idx], ...data };
-    return mockProducts[idx];
+  async create(data: Omit<Product, "id" | "createdAt">): Promise<Product> {
+    return authed<Product>("/products", json(toProductPayload(data)));
   },
 
-  async delete(id: string) {
-    await delay();
+  async update(id: string, data: Partial<Product>): Promise<Product> {
+    return authed<Product>(`/products/${encodeURIComponent(id)}`, put(toProductPayload(data)));
+  },
 
-    const idx = mockProducts.findIndex((p) => p.id === id);
-
-    if (idx !== -1) {
-      mockProducts.splice(idx, 1);
-    }
+  async delete(id: string): Promise<void> {
+    await authed<void>(`/products/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
 };
+
+function toProductPayload(data: Partial<Product>) {
+  return {
+    name: data.name,
+    description: data.description,
+    categoryId: data.categoryId !== undefined ? Number(data.categoryId) : undefined,
+    price: data.price,
+    image: data.image || null,
+    available: data.available,
+    stock: data.stock,
+    featured: data.featured,
+  };
+}
 
 // =================== Categories ===================
 export const categoryService = {
-  // Fetch active categories from the real Spring Boot backend
+  // Admin: all categories including inactive ones
   async list(): Promise<Category[]> {
+    return authed<Category[]>("/admin/categories");
+  },
+
+  // Public: active categories
+  async listPublic(): Promise<Category[]> {
     return apiRequest<Category[]>("/categories");
   },
 
-  // Create category - mock implementation for now
-  async create(data: Omit<Category, "id">) {
-    await delay();
-
-    const c: Category = {
-      ...data,
-      id: `cat-${Date.now()}`,
-    };
-
-    mockCategories.push(c);
-    return c;
+  async create(data: Omit<Category, "id">): Promise<Category> {
+    return authed<Category>("/admin/categories", json(data));
   },
 
-  // Update category - mock implementation for now
-  async update(id: string, data: Partial<Category>) {
-    await delay();
-
-    const idx = mockCategories.findIndex((c) => c.id === id);
-
-    if (idx === -1) {
-      throw new Error("Not found");
-    }
-
-    mockCategories[idx] = {
-      ...mockCategories[idx],
-      ...data,
-    };
-
-    return mockCategories[idx];
+  async update(id: string, data: Partial<Category>): Promise<Category> {
+    return authed<Category>(`/admin/categories/${encodeURIComponent(id)}`, put(data));
   },
 
-  // Delete category - mock implementation for now
-  async delete(id: string) {
-    await delay();
-
-    const idx = mockCategories.findIndex((c) => c.id === id);
-
-    if (idx !== -1) {
-      mockCategories.splice(idx, 1);
-    }
+  // Deactivates the category instead of deleting it
+  async delete(id: string): Promise<void> {
+    await authed<void>(`/admin/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
 };
 
-// =================== Users ===================
+// =================== Users (admin) ===================
 export const userService = {
-  async list() {
-    await delay();
-    return mockUsers;
+  async list(): Promise<User[]> {
+    const rows = await authed<BackendUser[]>("/admin/users");
+    return rows.map(mapBackendUser);
   },
 
-  async getById(id: string) {
-    return mockUsers.find((u) => u.id === id);
-  },
+  // Maps the panel's status choice onto the backend actions
+  async updateStatus(user: User, status: AccountStatus): Promise<void> {
+    let action: string;
 
-  async updateStatus(id: string, status: User["status"]) {
-    await delay();
-
-    const u = mockUsers.find((u) => u.id === id);
-
-    if (u) {
-      u.status = status;
+    if (status === "approved") {
+      action = user.status === "pending" ? "approve" : "activate";
+    } else if (status === "suspended") {
+      action = "suspend";
+    } else if (status === "denied") {
+      action = "reject";
+    } else {
+      throw new ApiError("This status change is not supported.", "INVALID_STATUS_CHANGE", 400);
     }
 
-    return u;
-  },
-
-  async update(id: string, data: Partial<User>) {
-    await delay();
-
-    const u = mockUsers.find((u) => u.id === id);
-
-    if (u) {
-      Object.assign(u, data);
-    }
-
-    return u;
+    await authed<BackendUser>(`/admin/users/${encodeURIComponent(user.id)}/${action}`, patch());
   },
 };
 
 // =================== Orders ===================
 export const orderService = {
-  async list() {
-    await delay();
-    return mockOrders;
+  // Customer: my orders
+  async listMine(): Promise<Order[]> {
+    return authed<Order[]>("/orders/mine");
   },
 
-  async listByUser(userId: string) {
-    await delay();
-    return mockOrders.filter((o) => o.userId === userId);
+  async getMine(id: string): Promise<Order> {
+    return authed<Order>(`/orders/mine/${encodeURIComponent(id)}`);
   },
 
-  async getById(id: string) {
-    return mockOrders.find((o) => o.id === id);
+  // Customer: place an order; the server works out prices and checks credit and stock
+  async create(items: { productId: string; quantity: number }[]): Promise<Order> {
+    return authed<Order>("/orders", json({
+      items: items.map((i) => ({ productId: Number(i.productId), quantity: i.quantity })),
+    }));
   },
 
-  async create(
-    data: Omit<Order, "id" | "createdAt" | "timeline" | "status">
-  ) {
-    await delay();
-
-    const order: Order = {
-      ...data,
-      id: `ORD-${1000 + mockOrders.length + 1}`,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      timeline: [
-        {
-          status: "pending",
-          date: new Date().toISOString(),
-        },
-      ],
-    };
-
-    mockOrders.push(order);
-    return order;
+  // Admin: every order
+  async list(): Promise<Order[]> {
+    return authed<Order[]>("/admin/orders");
   },
 
-  async updateStatus(
-    id: string,
-    status: Order["status"],
-    adminNote?: string
-  ) {
-    await delay();
+  async getAny(id: string): Promise<Order> {
+    return authed<Order>(`/admin/orders/${encodeURIComponent(id)}`);
+  },
 
-    const o = mockOrders.find((o) => o.id === id);
-
-    if (!o) {
-      throw new Error("Not found");
-    }
-
-    o.status = status;
-
-    if (adminNote) {
-      o.adminNote = adminNote;
-    }
-
-    o.timeline.push({
-      status,
-      date: new Date().toISOString(),
-    });
-
-    return o;
+  async updateStatus(id: string, status: Order["status"], note?: string): Promise<Order> {
+    return authed<Order>(`/admin/orders/${encodeURIComponent(id)}/status`, patch({ status, note }));
   },
 };
 
-// =================== Payment Requests ===================
+// =================== Payment requests ===================
 export const paymentRequestService = {
-  async list() {
-    await delay();
-    return mockPaymentRequests;
+  async listMine(): Promise<PaymentRequest[]> {
+    return authed<PaymentRequest[]>("/payment-requests/mine");
   },
 
-  async listByUser(userId: string) {
-    await delay();
-    return mockPaymentRequests.filter((p) => p.userId === userId);
+  async list(): Promise<PaymentRequest[]> {
+    return authed<PaymentRequest[]>("/admin/payment-requests");
   },
 
   async create(data: {
@@ -286,194 +212,98 @@ export const paymentRequestService = {
     method: PaymentMethod;
     reference: string;
     note?: string;
-    userId: string;
-  }) {
-    await delay();
-
-    const pr: PaymentRequest = {
-      id: `pr-${Date.now()}`,
-      ...data,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-    };
-
-    mockPaymentRequests.push(pr);
-    return pr;
+  }): Promise<PaymentRequest> {
+    return authed<PaymentRequest>("/payment-requests", json(data));
   },
 
-  async approve(id: string) {
-    await delay();
-
-    const pr = mockPaymentRequests.find((p) => p.id === id);
-
-    if (!pr) {
-      throw new Error("Not found");
-    }
-
-    pr.status = "approved";
-    pr.reviewedAt = new Date().toISOString();
-
-    // Add to user credit
-    const u = mockUsers.find((u) => u.id === pr.userId);
-
-    if (u) {
-      u.credit += pr.amount;
-    }
-
-    // Log credit transaction
-    mockCreditTransactions.push({
-      id: `ct-${Date.now()}`,
-      userId: pr.userId,
-      type: "added",
-      amount: pr.amount,
-      description: `Top-up via ${pr.method}`,
-      createdAt: new Date().toISOString(),
-    });
-
-    return pr;
+  async approve(id: string): Promise<PaymentRequest> {
+    return authed<PaymentRequest>(`/admin/payment-requests/${encodeURIComponent(id)}/approve`, patch());
   },
 
-  async reject(id: string, adminNote?: string) {
-    await delay();
-
-    const pr = mockPaymentRequests.find((p) => p.id === id);
-
-    if (!pr) {
-      throw new Error("Not found");
-    }
-
-    pr.status = "rejected";
-    pr.reviewedAt = new Date().toISOString();
-
-    if (adminNote) {
-      pr.adminNote = adminNote;
-    }
-
-    return pr;
-  },
-};
-
-// =================== Notifications ===================
-export const notificationService = {
-  async listByUser(userId: string) {
-    await delay();
-    return mockNotifications.filter((n) => n.userId === userId);
-  },
-
-  async markAllRead(userId: string) {
-    await delay();
-
-    mockNotifications.forEach((n) => {
-      if (n.userId === userId) {
-        n.read = true;
-      }
-    });
-  },
-
-  async markRead(id: string) {
-    await delay();
-
-    const n = mockNotifications.find((n) => n.id === id);
-
-    if (n) {
-      n.read = true;
-    }
+  async reject(id: string, note?: string): Promise<PaymentRequest> {
+    return authed<PaymentRequest>(`/admin/payment-requests/${encodeURIComponent(id)}/reject`, patch({ note }));
   },
 };
 
 // =================== Credit ===================
 export const creditService = {
-  async listByUser(userId: string) {
-    await delay();
-    return mockCreditTransactions.filter((c) => c.userId === userId);
+  async listMine(): Promise<CreditTransaction[]> {
+    return authed<CreditTransaction[]>("/credit/mine");
+  },
+
+  async listAll(): Promise<CreditTransaction[]> {
+    return authed<CreditTransaction[]>("/admin/credit/transactions");
+  },
+
+  async adjust(userId: string, type: "add" | "remove", amount: number, note: string): Promise<void> {
+    await authed<void>(`/admin/users/${encodeURIComponent(userId)}/credit`, json({ type, amount, note }));
   },
 };
 
-// =================== Content / CMS ===================
+// =================== Notifications ===================
+export const notificationService = {
+  async listMine(): Promise<Notification[]> {
+    return authed<Notification[]>("/notifications/mine");
+  },
+
+  async markRead(id: string): Promise<void> {
+    await authed<void>(`/notifications/${encodeURIComponent(id)}/read`, patch());
+  },
+
+  async markAllRead(): Promise<void> {
+    await authed<void>("/notifications/read-all", patch());
+  },
+};
+
+// =================== Content / announcements ===================
 export const contentService = {
-  async listContent() {
-    await delay();
-    return mockCmsContent;
+  // Public: editable website text
+  async listContent(): Promise<CmsContent[]> {
+    return apiRequest<CmsContent[]>("/content");
   },
 
-  async updateContent(id: string, value: CmsContent["value"]) {
-    await delay();
-
-    const c = mockCmsContent.find((c) => c.id === id);
-
-    if (c) {
-      c.value = value;
-    }
-
-    return c;
+  async updateContent(id: string, value: CmsContent["value"]): Promise<CmsContent> {
+    return authed<CmsContent>(`/admin/content/${encodeURIComponent(id)}`, put({ value }));
   },
 
-  async getAnnouncements() {
-    await delay();
-    return mockAnnouncements.filter((a) => a.published);
+  // Public: published announcements
+  async getAnnouncements(): Promise<Announcement[]> {
+    return apiRequest<Announcement[]>("/announcements");
   },
 
-  async listAnnouncements() {
-    await delay();
-    return mockAnnouncements;
+  // Admin: every announcement including drafts
+  async listAnnouncements(): Promise<Announcement[]> {
+    return authed<Announcement[]>("/admin/announcements");
   },
 
-  async createAnnouncement(
-    data: Omit<Announcement, "id" | "createdAt">
-  ) {
-    await delay();
-
-    const a: Announcement = {
-      ...data,
-      id: `ann-${Date.now()}`,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-
-    mockAnnouncements.unshift(a);
-    return a;
+  async createAnnouncement(data: Omit<Announcement, "id" | "createdAt">): Promise<Announcement> {
+    return authed<Announcement>("/admin/announcements", json(data));
   },
 
-  async updateAnnouncement(id: string, data: Partial<Announcement>) {
-    await delay();
-
-    const a = mockAnnouncements.find((a) => a.id === id);
-
-    if (a) {
-      Object.assign(a, data);
-    }
-
-    return a;
+  async updateAnnouncement(id: string, data: Partial<Announcement>): Promise<Announcement> {
+    return authed<Announcement>(`/admin/announcements/${encodeURIComponent(id)}`, put(data));
   },
 
-  async deleteAnnouncement(id: string) {
-    await delay();
-
-    const idx = mockAnnouncements.findIndex((a) => a.id === id);
-
-    if (idx !== -1) {
-      mockAnnouncements.splice(idx, 1);
-    }
+  async deleteAnnouncement(id: string): Promise<void> {
+    await authed<void>(`/admin/announcements/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
 };
 
 // =================== Settings ===================
 export const settingsService = {
+  // Public: the same settings the site header and footer use
   async get(): Promise<SiteSettings> {
-    await delay(100);
-
-    return {
-      siteName: "R-Buffer",
-      contactEmail: "support@rbuffer.io",
-      contactPhone: "+93 700 000 000",
-      defaultLanguage: "en",
-      supportedLanguages: ["en", "fa", "ps"],
-      theme: "light",
-      enableNotifications: true,
-    };
+    return apiRequest<SiteSettings>("/settings");
   },
 
-  async update(_data: Partial<SiteSettings>) {
-    await delay();
-    return _data;
+  async update(data: SiteSettings): Promise<SiteSettings> {
+    return authed<SiteSettings>("/admin/settings", put(data));
+  },
+};
+
+// =================== Admin statistics ===================
+export const statsService = {
+  async get(): Promise<AdminStats> {
+    return authed<AdminStats>("/admin/stats");
   },
 };

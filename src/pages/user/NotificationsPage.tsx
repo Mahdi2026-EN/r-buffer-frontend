@@ -4,7 +4,6 @@ import { useI18n } from "../../i18n/I18nProvider";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { EmptyState } from "../../components/ui/States";
-import { mockUsers } from "../../services/mockData";
 import { notificationService } from "../../services/api";
 import type { Notification } from "../../types";
 import { useToast } from "../../components/ui/Toast";
@@ -13,18 +12,17 @@ import { cn } from "../../utils/cn";
 export function NotificationsPage() {
   const { t, locale } = useI18n();
   const { toast } = useToast();
-  const user = mockUsers[0];
   const [items, setItems] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
   useEffect(() => {
-    notificationService.listByUser(user.id).then(setItems);
-  }, [user.id]);
+    notificationService.listMine().then(setItems).catch(() => undefined);
+  }, []);
 
   const filtered = filter === "unread" ? items.filter((n) => !n.read) : items;
 
   async function markAll() {
-    await notificationService.markAllRead(user.id);
+    await notificationService.markAllRead();
     setItems((prev) => prev.map((n) => ({ ...n, read: true })));
     toast("All notifications marked as read", "success");
   }

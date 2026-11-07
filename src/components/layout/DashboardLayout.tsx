@@ -1,5 +1,5 @@
 import { Outlet } from "react-router-dom";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Bell, CreditCard, LogOut, Menu, Package, Receipt, User, Wallet, X } from "lucide-react";
 import { Button } from "../ui/Button";
@@ -7,18 +7,32 @@ import { LanguageSelector } from "../ui/LanguageSelector";
 import { Logo } from "./Logo";
 import { cn } from "../../utils/cn";
 import { useI18n } from "../../i18n/I18nProvider";
-import { mockNotifications, mockUsers } from "../../services/mockData";
+import { authService } from "../../services/auth";
+import { notificationService } from "../../services/api";
+import type { Notification, User as AppUser } from "../../types";
 
 export function DashboardLayout() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const user = mockUsers[0];
+  const [user, setUser] = useState<AppUser | null>(authService.getCurrentUser());
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
+  // Refresh the session user (credit changes) and notifications whenever the page changes
   useEffect(() => {
     setOpen(false);
-  }, []);
+    setNotifOpen(false);
+
+    authService.me().then(setUser).catch(() => undefined);
+    notificationService.listMine().then(setNotifications).catch(() => undefined);
+  }, [location.pathname]);
+
+  function logout() {
+    authService.logout();
+    navigate("/login");
+  }
 
   const navItems = [
     { to: "/dashboard", icon: <Wallet className="h-4 w-4" />, label: t("nav.dashboard") },
@@ -30,7 +44,8 @@ export function DashboardLayout() {
     { to: "/profile", icon: <User className="h-4 w-4" />, label: t("nav.profile") },
   ];
 
-  const unread = mockNotifications.filter((n) => n.userId === user.id && !n.read).length;
+  const unread = notifications.filter((n) => !n.read).length;
+  const name = user?.fullName ?? "";
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -57,13 +72,13 @@ export function DashboardLayout() {
       <div className="border-t border-ink-100 p-3">
         <div className="flex items-center gap-3 rounded-lg bg-ink-50 p-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-white font-semibold text-sm">
-            {user.fullName.split(" ").map((s) => s[0]).join("").slice(0, 2)}
+            {name.split(" ").map((s) => s[0]).join("").slice(0, 2)}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="truncate text-sm font-semibold text-ink-900">{user.fullName}</p>
-            <p className="truncate text-xs text-ink-500">{user.email}</p>
+            <p className="truncate text-sm font-semibold text-ink-900">{name}</p>
+            <p className="truncate text-xs text-ink-500">{user?.email}</p>
           </div>
-          <button onClick={() => navigate("/")} className="text-ink-400 hover:text-red-600 transition-colors" aria-label={t("nav.logout")}>
+          <button onClick={logout} className="text-ink-400 hover:text-red-600 transition-colors" aria-label={t("nav.logout")}>
             <LogOut className="h-4 w-4" />
           </button>
         </div>
@@ -107,20 +122,20 @@ export function DashboardLayout() {
                     <h3 className="text-sm font-semibold text-ink-900">{t("notifications.title")}</h3>
                   </div>
                   <div className="max-h-96 overflow-y-auto">
-                    {mockNotifications
-                      .filter((n) => n.userId === user.id)
-                      .slice(0, 4)
-                      .map((n) => (
-                        <Link
-                          key={n.id}
-                          to="/notifications"
-                          onClick={() => setNotifOpen(false)}
-                          className="block border-b border-ink-100 px-4 py-3 hover:bg-ink-50 last:border-0"
-                        >
-                          <p className="text-sm font-medium text-ink-900">{n.title.en}</p>
-                          <p className="mt-0.5 text-xs text-ink-500">{n.body.en}</p>
-                        </Link>
-                      ))}
+                    {notifications.length === 0 && (
+                      <p className="px-4 py-6 text-center text-sm text-ink-500">{t("notifications.noNotifications")}</p>
+                    )}
+                    {notifications.slice(0, 4).map((n) => (
+                      <Link
+                        key={n.id}
+                        to="/notifications"
+                        onClick={() => setNotifOpen(false)}
+                        className="block border-b border-ink-100 px-4 py-3 hover:bg-ink-50 last:border-0"
+                      >
+                        <p className="text-sm font-medium text-ink-900">{n.title[locale]}</p>
+                        <p className="mt-0.5 text-xs text-ink-500">{n.body[locale]}</p>
+                      </Link>
+                    ))}
                   </div>
                   <div className="border-t border-ink-100 p-2">
                     <Link to="/notifications" onClick={() => setNotifOpen(false)} className="block rounded-md px-2 py-1.5 text-center text-sm font-medium text-brand-700 hover:bg-brand-50">
@@ -132,14 +147,12 @@ export function DashboardLayout() {
             </div>
             <Link to="/profile">
               <div className="hidden h-9 w-9 items-center justify-center rounded-full bg-brand-500 text-white font-semibold text-sm sm:flex">
-                {user.fullName.split(" ").map((s) => s[0]).join("").slice(0, 2)}
+                {name.split(" ").map((s) => s[0]).join("").slice(0, 2)}
               </div>
             </Link>
-            <Link to="/" className="hidden sm:inline-flex">
-              <Button variant="ghost" size="sm" leftIcon={<LogOut className="h-4 w-4" />}>
-                {t("nav.logout")}
-              </Button>
-            </Link>
+            <Button variant="ghost" size="sm" leftIcon={<LogOut className="h-4 w-4" />} onClick={logout} className="hidden sm:inline-flex">
+              {t("nav.logout")}
+            </Button>
           </div>
         </header>
         <main className="flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">

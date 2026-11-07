@@ -5,32 +5,31 @@ import { useI18n } from "../../i18n/I18nProvider";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { StatusBadge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
-import {
-  mockCreditTransactions,
-  mockNotifications,
-  mockOrders,
-  mockPaymentRequests,
-  mockUsers,
-} from "../../services/mockData";
-import type { Order, PaymentRequest } from "../../types";
+import { creditService, notificationService, orderService, paymentRequestService } from "../../services/api";
+import { authService } from "../../services/auth";
+import type { CreditTransaction, Notification, Order, PaymentRequest } from "../../types";
 
 export function DashboardPage() {
   const { t, locale } = useI18n();
-  const user = mockUsers[0];
+  const [user, setUser] = useState(authService.getCurrentUser()!);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [recentPayments, setRecentPayments] = useState<PaymentRequest[]>([]);
+  const [credit, setCredit] = useState<CreditTransaction[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   useEffect(() => {
-    setRecentOrders(mockOrders.filter((o) => o.userId === user.id).slice(0, 4));
-    setRecentPayments(mockPaymentRequests.filter((p) => p.userId === user.id).slice(0, 4));
-  }, [user.id]);
+    orderService.listMine().then((o) => setRecentOrders(o.slice(0, 4))).catch(() => undefined);
+    paymentRequestService.listMine().then((p) => setRecentPayments(p.slice(0, 4))).catch(() => undefined);
+    creditService.listMine().then(setCredit).catch(() => undefined);
+    notificationService.listMine().then(setNotifications).catch(() => undefined);
+    authService.me().then(setUser).catch(() => undefined);
+  }, []);
 
-  const addedThisMonth = mockCreditTransactions
-    .filter((c) => c.userId === user.id && c.type === "added")
-    .reduce((s, c) => s + c.amount, 0);
-  const usedThisMonth = mockCreditTransactions
-    .filter((c) => c.userId === user.id && c.type === "used")
-    .reduce((s, c) => s + c.amount, 0);
+  // Totals for the current calendar month
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const thisMonth = credit.filter((c) => new Date(c.createdAt) >= monthStart);
+  const addedThisMonth = thisMonth.filter((c) => c.type === "added").reduce((s, c) => s + c.amount, 0);
+  const usedThisMonth = thisMonth.filter((c) => c.type === "used").reduce((s, c) => s + c.amount, 0);
 
   const statusLabel = (s: Order["status"]) =>
     s === "pending"
@@ -63,7 +62,7 @@ export function DashboardPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs uppercase tracking-wider text-white/70">{t("dashboard.currentCredit")}</p>
-              <p className="mt-2 text-4xl font-bold sm:text-5xl">{user.credit.toLocaleString()}</p>
+              <p className="mt-2 text-4xl font-bold sm:text-5xl">{(user.credit ?? 0).toLocaleString()}</p>
               <p className="mt-1 text-xs text-white/70">{t("products.credits")}</p>
             </div>
             <Wallet className="h-10 w-10 text-white/30" />
@@ -186,8 +185,10 @@ export function DashboardPage() {
         </CardHeader>
         <CardBody>
           <div className="space-y-2">
-            {mockNotifications
-              .filter((n) => n.userId === user.id)
+            {notifications.length === 0 && (
+              <p className="py-4 text-center text-sm text-ink-500">{t("notifications.noNotifications")}</p>
+            )}
+            {notifications
               .slice(0, 3)
               .map((n) => (
                 <div key={n.id} className="flex items-start gap-3 rounded-lg p-3 hover:bg-ink-50">

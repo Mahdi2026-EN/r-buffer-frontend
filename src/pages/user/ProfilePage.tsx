@@ -5,26 +5,46 @@ import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { StatusBadge } from "../../components/ui/Badge";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
-import { mockUsers } from "../../services/mockData";
 import { useToast } from "../../components/ui/Toast";
+import { authService } from "../../services/auth";
+import { ApiError } from "../../services/http";
+import type { User as AppUser } from "../../types";
 
 export function ProfilePage() {
   const { t } = useI18n();
   const { toast } = useToast();
-  const user = mockUsers[0];
+  const [user, setUser] = useState<AppUser>(authService.getCurrentUser()!);
   const [info, setInfo] = useState({ fullName: user.fullName, email: user.email, phone: user.phone });
   const [password, setPassword] = useState({ current: "", next: "", confirm: "" });
+  const [saving, setSaving] = useState(false);
 
-  function saveInfo(e: React.FormEvent) {
+  async function saveInfo(e: React.FormEvent) {
     e.preventDefault();
-    toast(t("profile.profileUpdated"), "success");
+    setSaving(true);
+    try {
+      const updated = await authService.updateProfile({ fullName: info.fullName, phone: info.phone });
+      setUser(updated);
+      toast(t("profile.profileUpdated"), "success");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not update your profile.", "error");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function savePassword(e: React.FormEvent) {
+  async function savePassword(e: React.FormEvent) {
     e.preventDefault();
     if (password.next !== password.confirm) return;
-    setPassword({ current: "", next: "", confirm: "" });
-    toast(t("profile.passwordUpdated"), "success");
+    setSaving(true);
+    try {
+      await authService.changePassword(password.current, password.next);
+      setPassword({ current: "", next: "", confirm: "" });
+      toast(t("profile.passwordUpdated"), "success");
+    } catch (error) {
+      toast(error instanceof ApiError ? error.message : "Could not change your password.", "error");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const statusLabel =
@@ -58,12 +78,7 @@ export function ProfilePage() {
               onChange={(e) => setInfo({ ...info, fullName: e.target.value })}
             />
             <div className="grid gap-4 sm:grid-cols-2">
-              <Input
-                label={t("auth.email")}
-                type="email"
-                value={info.email}
-                onChange={(e) => setInfo({ ...info, email: e.target.value })}
-              />
+              <Input label={t("auth.email")} type="email" value={info.email} disabled />
               <Input
                 label={t("auth.phone")}
                 type="tel"
@@ -83,7 +98,7 @@ export function ProfilePage() {
                 </div>
               </div>
             </div>
-            <Button type="submit" variant="primary" size="md" leftIcon={<Save className="h-4 w-4" />}>
+            <Button type="submit" variant="primary" size="md" loading={saving} leftIcon={<Save className="h-4 w-4" />}>
               {t("profile.updateProfile")}
             </Button>
           </form>
@@ -111,6 +126,7 @@ export function ProfilePage() {
                 label={t("profile.newPassword")}
                 type="password"
                 required
+                minLength={8}
                 value={password.next}
                 onChange={(e) => setPassword({ ...password, next: e.target.value })}
               />
@@ -123,7 +139,7 @@ export function ProfilePage() {
                 error={password.confirm && password.next !== password.confirm ? "Passwords do not match" : undefined}
               />
             </div>
-            <Button type="submit" variant="primary" size="md" leftIcon={<Save className="h-4 w-4" />}>
+            <Button type="submit" variant="primary" size="md" loading={saving} leftIcon={<Save className="h-4 w-4" />}>
               {t("profile.changePasswordButton")}
             </Button>
           </form>

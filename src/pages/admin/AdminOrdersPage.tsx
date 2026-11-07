@@ -7,7 +7,6 @@ import { Input, Select } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { StatusBadge } from "../../components/ui/Badge";
 import { DataTable, type Column } from "../../components/admin/DataTable";
-import { mockUsers } from "../../services/mockData";
 import { orderService } from "../../services/api";
 import type { Order } from "../../types";
 import { Pagination } from "../../components/ui/Pagination";
@@ -50,7 +49,7 @@ export function AdminOrdersPage() {
     {
       key: "user",
       header: t("admin.user"),
-      cell: (o) => mockUsers.find((u) => u.id === o.userId)?.fullName,
+      cell: (o) => o.userName,
     },
     { key: "product", header: t("admin.productName"), cell: (o) => o.items[0].productName[locale] },
     { key: "total", header: t("common.total"), cell: (o) => `${o.total}` },

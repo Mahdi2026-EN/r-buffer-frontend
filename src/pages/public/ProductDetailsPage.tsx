@@ -1,26 +1,69 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ShoppingBag, Wallet } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
-import { mockCategories, mockProducts, mockUsers } from "../../services/mockData";
-import { orderService } from "../../services/api";
+import { orderService, productService, categoryService } from "../../services/api";
+import { authService } from "../../services/auth";
+import { ApiError } from "../../services/http";
 import { useToast } from "../../components/ui/Toast";
 import { ProductCard } from "../../components/public/ProductCard";
+import type { Category, Product, User } from "../../types";
+import { LoadingState } from "../../components/ui/States";
 
 export function ProductDetailsPage() {
   const { t, locale } = useI18n();
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const product = mockProducts.find((p) => p.id === id);
+
+  const [product, setProduct] = useState<Product | null>(null);
+  const [related, setRelated] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [user, setUser] = useState<User | null>(authService.getCurrentUser());
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [qty, setQty] = useState(1);
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  if (!product) {
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setNotFound(false);
+
+    Promise.all([productService.getById(id ?? ""), productService.list(), categoryService.listPublic()])
+      .then(([p, all, cats]) => {
+        if (!active) return;
+        setProduct(p);
+        setCategories(cats);
+        setRelated(all.filter((x) => x.categoryId === p.categoryId && x.id !== p.id).slice(0, 4));
+      })
+      .catch(() => {
+        if (active) setNotFound(true);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    authService.me().then((u) => active && setUser(u)).catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-20">
+        <LoadingState />
+      </div>
+    );
+  }
+
+  if (notFound || !product) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
         <h1 className="text-2xl font-bold text-ink-900">{t("states.notFound")}</h1>
@@ -32,39 +75,31 @@ export function ProductDetailsPage() {
     );
   }
 
-  const category = mockCategories.find((c) => c.id === product.categoryId);
-  const related = mockProducts
-    .filter((p) => p.categoryId === product.categoryId && p.id !== product.id)
-    .slice(0, 4);
-  const user = mockUsers[0];
+  const category = categories.find((c) => c.id === product.categoryId);
   const total = product.price * qty;
-  const hasEnoughCredit = user.credit >= total;
+  const credit = user?.credit ?? 0;
+  const hasEnoughCredit = credit >= total;
+  const inStock = product.available && product.stock >= qty;
 
   async function handleConfirm() {
     if (!product) return;
-    if (!hasEnoughCredit) {
-      toast("Insufficient credit. Please add credit to your account.", "error");
+
+    if (!user) {
+      navigate("/login", { state: { from: `/products/${product.id}` } });
       return;
     }
+
     setSubmitting(true);
     try {
-      await orderService.create({
-        userId: user.id,
-        items: [
-          {
-            productId: product.id,
-            productName: product.name,
-            quantity: qty,
-            unitPrice: product.price,
-          },
-        ],
-        total,
-      });
+      await orderService.create([{ productId: product.id, quantity: qty }]);
+      // Refresh the stored user so the new credit balance shows everywhere
+      await authService.me().catch(() => undefined);
       toast("Order placed successfully.", "success");
       setOpen(false);
       navigate("/orders");
     } catch (e) {
-      toast("Failed to place order.", "error");
+      const message = e instanceof ApiError ? e.message : "Failed to place order.";
+      toast(message, "error");
     } finally {
       setSubmitting(false);
     }
@@ -107,7 +142,7 @@ export function ProductDetailsPage() {
           </div>
 
           <div className="mt-4 flex items-center gap-2">
-            {product.available ? (
+            {product.available && product.stock > 0 ? (
               <Badge tone="success">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 {t("products.available")}
@@ -137,7 +172,7 @@ export function ProductDetailsPage() {
               </button>
               <span className="w-12 text-center text-sm font-medium">{qty}</span>
               <button
-                onClick={() => setQty(qty + 1)}
+                onClick={() => setQty(Math.min(product.stock || 1, qty + 1))}
                 className="h-10 w-10 text-ink-600 hover:bg-ink-50 rounded-e-lg"
               >
                 +
@@ -147,7 +182,7 @@ export function ProductDetailsPage() {
               variant="primary"
               size="lg"
               leftIcon={<ShoppingBag className="h-4 w-4" />}
-              disabled={!product.available}
+              disabled={!inStock}
               onClick={() => setOpen(true)}
             >
               {t("products.purchase")} · {total}
@@ -212,7 +247,7 @@ export function ProductDetailsPage() {
               </div>
               <div>
                 <p className="text-xs text-ink-500">{t("dashboard.currentCredit")}</p>
-                <p className="text-sm font-semibold text-ink-900">{user.credit}</p>
+                <p className="text-sm font-semibold text-ink-900">{credit}</p>
               </div>
             </div>
             {!hasEnoughCredit && (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, Filter as FilterIcon, UserCheck, ShieldOff } from "lucide-react";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Card, CardBody } from "../../components/ui/Card";
@@ -7,7 +7,6 @@ import { StatusBadge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
 import { DataTable, type Column } from "../../components/admin/DataTable";
-import { mockUsers } from "../../services/mockData";
 import { userService } from "../../services/api";
 import type { User } from "../../types";
 import { Pagination } from "../../components/ui/Pagination";
@@ -16,7 +15,11 @@ import { useToast } from "../../components/ui/Toast";
 export function UsersPage() {
   const { t } = useI18n();
   const { toast } = useToast();
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    userService.list().then(setUsers).catch(() => undefined);
+  }, []);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<string>("");
   const [page, setPage] = useState(1);
@@ -46,7 +49,7 @@ export function UsersPage() {
   async function doAction() {
     if (!confirm) return;
     const newStatus = confirm.action === "suspend" ? "suspended" : "approved";
-    await userService.updateStatus(confirm.user.id, newStatus);
+    await userService.updateStatus(confirm.user, newStatus);
     setUsers((prev) => prev.map((u) => (u.id === confirm.user.id ? { ...u, status: newStatus } : u)));
     setConfirm(null);
     toast(t("admin.success"), "success");

@@ -1,15 +1,27 @@
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useI18n } from "../../i18n/I18nProvider";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { StatusBadge } from "../../components/ui/Badge";
-import { mockOrders } from "../../services/mockData";
-import type { OrderStatus } from "../../types";
+import { LoadingState } from "../../components/ui/States";
+import { orderService } from "../../services/api";
+import type { Order, OrderStatus } from "../../types";
 
 export function OrderDetailsPage() {
   const { t, locale } = useI18n();
   const { id } = useParams();
-  const order = mockOrders.find((o) => o.id === id);
+  const [order, setOrder] = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    orderService.getMine(id ?? "")
+      .then(setOrder)
+      .catch(() => setOrder(null))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) return <LoadingState />;
 
   if (!order) {
     return (
@@ -41,7 +53,7 @@ export function OrderDetailsPage() {
 
       <div>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">{order.id}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink-900 sm:text-3xl">#{order.id}</h1>
           <StatusBadge status={order.status} label={statusLabel(order.status)} />
         </div>
       </div>

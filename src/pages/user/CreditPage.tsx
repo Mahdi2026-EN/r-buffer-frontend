@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
 import { Input, Select, Textarea } from "../../components/ui/Input";
 import { creditService, paymentRequestService } from "../../services/api";
-import { mockUsers } from "../../services/mockData";
+import { authService } from "../../services/auth";
 import type { CreditTransaction, PaymentMethod } from "../../types";
 import { useToast } from "../../components/ui/Toast";
 import { Badge } from "../../components/ui/Badge";
@@ -14,7 +14,7 @@ import { Badge } from "../../components/ui/Badge";
 export function CreditPage() {
   const { t, locale } = useI18n();
   const { toast } = useToast();
-  const user = mockUsers[0];
+  const user = authService.getCurrentUser()!;
   const [history, setHistory] = useState<CreditTransaction[]>([]);
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -22,8 +22,8 @@ export function CreditPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    creditService.listByUser(user.id).then(setHistory);
-  }, [user.id]);
+    creditService.listMine().then(setHistory).catch(() => undefined);
+  }, []);
 
   const totalAdded = history.filter((c) => c.type === "added").reduce((s, c) => s + c.amount, 0);
   const totalUsed = history.filter((c) => c.type === "used").reduce((s, c) => s + c.amount, 0);
@@ -51,7 +51,6 @@ export function CreditPage() {
       method: form.method,
       reference: form.reference,
       note: form.note,
-      userId: user.id,
     });
     setSubmitting(false);
     setOpen(false);

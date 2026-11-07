@@ -6,21 +6,19 @@ import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { StatusBadge } from "../../components/ui/Badge";
 import { EmptyState } from "../../components/ui/States";
 import { Button } from "../../components/ui/Button";
-import { mockUsers } from "../../services/mockData";
 import { orderService } from "../../services/api";
 import type { Order } from "../../types";
 import { Pagination } from "../../components/ui/Pagination";
 
 export function OrdersPage() {
   const { t, locale } = useI18n();
-  const user = mockUsers[0];
   const [items, setItems] = useState<Order[]>([]);
   const [page, setPage] = useState(1);
   const pageSize = 6;
 
   useEffect(() => {
-    orderService.listByUser(user.id).then(setItems);
-  }, [user.id]);
+    orderService.listMine().then(setItems).catch(() => undefined);
+  }, []);
 
   const statusLabel = (s: Order["status"]) =>
     s === "pending"
