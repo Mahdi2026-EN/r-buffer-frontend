@@ -29,10 +29,17 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const headers = new Headers(options.headers);
 
-  if (options.body != null && !headers.has("Content-Type")) {
+  // Set JSON Content-Type for normal request bodies.
+  // Do not set it for FormData: the browser must add the multipart boundary.
+  if (
+    options.body != null &&
+    !(options.body instanceof FormData) &&
+    !headers.has("Content-Type")
+  ) {
     headers.set("Content-Type", "application/json");
   }
 
+  // Attach JWT authentication when available.
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }

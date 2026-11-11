@@ -1,3 +1,4 @@
+
 // Real API layer: every call goes to the Spring Boot backend.
 // Response shapes match the backend DTOs (status/method/type values are lower case).
 
@@ -15,6 +16,7 @@ import type {
   User,
   AccountStatus,
 } from "../types";
+
 import { ApiError, apiRequest } from "./http";
 import { authService as session, mapBackendUser, type BackendUser } from "./auth";
 
@@ -38,12 +40,20 @@ export interface AdminStats {
   productActivity: { name: string; value: number }[];
 }
 
-// Calls that need a signed-in user. An expired or invalid token signs the user out.
-async function authed<T>(path: string, init: RequestInit = {}): Promise<T> {
+// Calls that need a signed-in user.
+// An expired or invalid token signs the user out.
+async function authed<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
   const token = session.getToken();
 
   if (!token) {
-    throw new ApiError("Please sign in to continue.", "UNAUTHENTICATED", 401);
+    throw new ApiError(
+      "Please sign in to continue.",
+      "UNAUTHENTICATED",
+      401,
+    );
   }
 
   try {
@@ -53,6 +63,7 @@ async function authed<T>(path: string, init: RequestInit = {}): Promise<T> {
       session.logout();
       window.location.href = "/login";
     }
+
     throw error;
   }
 }
@@ -85,19 +96,49 @@ export const productService = {
   },
 
   async getById(id: string): Promise<Product> {
-    return apiRequest<Product>(`/products/${encodeURIComponent(id)}`);
+    return apiRequest<Product>(
+      `/products/${encodeURIComponent(id)}`,
+    );
   },
 
-  async create(data: Omit<Product, "id" | "createdAt">): Promise<Product> {
-    return authed<Product>("/products", json(toProductPayload(data)));
+  async create(
+    data: Omit<Product, "id" | "createdAt">,
+  ): Promise<Product> {
+    return authed<Product>(
+      "/products",
+      json(toProductPayload(data)),
+    );
   },
 
-  async update(id: string, data: Partial<Product>): Promise<Product> {
-    return authed<Product>(`/products/${encodeURIComponent(id)}`, put(toProductPayload(data)));
+  async update(
+    id: string,
+    data: Partial<Product>,
+  ): Promise<Product> {
+    return authed<Product>(
+      `/products/${encodeURIComponent(id)}`,
+      put(toProductPayload(data)),
+    );
   },
 
   async delete(id: string): Promise<void> {
-    await authed<void>(`/products/${encodeURIComponent(id)}`, { method: "DELETE" });
+    await authed<void>(
+      `/products/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+  },
+
+  // Admin: upload or replace a product image
+  async uploadImage(id: string, file: File): Promise<Product> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    return authed<Product>(
+      `/admin/products/${encodeURIComponent(id)}/image`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
   },
 };
 
@@ -105,7 +146,10 @@ function toProductPayload(data: Partial<Product>) {
   return {
     name: data.name,
     description: data.description,
-    categoryId: data.categoryId !== undefined ? Number(data.categoryId) : undefined,
+    categoryId:
+      data.categoryId !== undefined
+        ? Number(data.categoryId)
+        : undefined,
     price: data.price,
     image: data.image || null,
     available: data.available,
@@ -130,13 +174,22 @@ export const categoryService = {
     return authed<Category>("/admin/categories", json(data));
   },
 
-  async update(id: string, data: Partial<Category>): Promise<Category> {
-    return authed<Category>(`/admin/categories/${encodeURIComponent(id)}`, put(data));
+  async update(
+    id: string,
+    data: Partial<Category>,
+  ): Promise<Category> {
+    return authed<Category>(
+      `/admin/categories/${encodeURIComponent(id)}`,
+      put(data),
+    );
   },
 
   // Deactivates the category instead of deleting it
   async delete(id: string): Promise<void> {
-    await authed<void>(`/admin/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
+    await authed<void>(
+      `/admin/categories/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
   },
 };
 
@@ -148,7 +201,10 @@ export const userService = {
   },
 
   // Maps the panel's status choice onto the backend actions
-  async updateStatus(user: User, status: AccountStatus): Promise<void> {
+  async updateStatus(
+    user: User,
+    status: AccountStatus,
+  ): Promise<void> {
     let action: string;
 
     if (status === "approved") {
@@ -158,10 +214,17 @@ export const userService = {
     } else if (status === "denied") {
       action = "reject";
     } else {
-      throw new ApiError("This status change is not supported.", "INVALID_STATUS_CHANGE", 400);
+      throw new ApiError(
+        "This status change is not supported.",
+        "INVALID_STATUS_CHANGE",
+        400,
+      );
     }
 
-    await authed<BackendUser>(`/admin/users/${encodeURIComponent(user.id)}/${action}`, patch());
+    await authed<BackendUser>(
+      `/admin/users/${encodeURIComponent(user.id)}/${action}`,
+      patch(),
+    );
   },
 };
 
@@ -173,14 +236,24 @@ export const orderService = {
   },
 
   async getMine(id: string): Promise<Order> {
-    return authed<Order>(`/orders/mine/${encodeURIComponent(id)}`);
+    return authed<Order>(
+      `/orders/mine/${encodeURIComponent(id)}`,
+    );
   },
 
-  // Customer: place an order; the server works out prices and checks credit and stock
-  async create(items: { productId: string; quantity: number }[]): Promise<Order> {
-    return authed<Order>("/orders", json({
-      items: items.map((i) => ({ productId: Number(i.productId), quantity: i.quantity })),
-    }));
+  // Customer: place an order; server checks credit and stock
+  async create(
+    items: { productId: string; quantity: number }[],
+  ): Promise<Order> {
+    return authed<Order>(
+      "/orders",
+      json({
+        items: items.map((i) => ({
+          productId: Number(i.productId),
+          quantity: i.quantity,
+        })),
+      }),
+    );
   },
 
   // Admin: every order
@@ -189,11 +262,20 @@ export const orderService = {
   },
 
   async getAny(id: string): Promise<Order> {
-    return authed<Order>(`/admin/orders/${encodeURIComponent(id)}`);
+    return authed<Order>(
+      `/admin/orders/${encodeURIComponent(id)}`,
+    );
   },
 
-  async updateStatus(id: string, status: Order["status"], note?: string): Promise<Order> {
-    return authed<Order>(`/admin/orders/${encodeURIComponent(id)}/status`, patch({ status, note }));
+  async updateStatus(
+    id: string,
+    status: Order["status"],
+    note?: string,
+  ): Promise<Order> {
+    return authed<Order>(
+      `/admin/orders/${encodeURIComponent(id)}/status`,
+      patch({ status, note }),
+    );
   },
 };
 
@@ -213,15 +295,27 @@ export const paymentRequestService = {
     reference: string;
     note?: string;
   }): Promise<PaymentRequest> {
-    return authed<PaymentRequest>("/payment-requests", json(data));
+    return authed<PaymentRequest>(
+      "/payment-requests",
+      json(data),
+    );
   },
 
   async approve(id: string): Promise<PaymentRequest> {
-    return authed<PaymentRequest>(`/admin/payment-requests/${encodeURIComponent(id)}/approve`, patch());
+    return authed<PaymentRequest>(
+      `/admin/payment-requests/${encodeURIComponent(id)}/approve`,
+      patch(),
+    );
   },
 
-  async reject(id: string, note?: string): Promise<PaymentRequest> {
-    return authed<PaymentRequest>(`/admin/payment-requests/${encodeURIComponent(id)}/reject`, patch({ note }));
+  async reject(
+    id: string,
+    note?: string,
+  ): Promise<PaymentRequest> {
+    return authed<PaymentRequest>(
+      `/admin/payment-requests/${encodeURIComponent(id)}/reject`,
+      patch({ note }),
+    );
   },
 };
 
@@ -235,8 +329,16 @@ export const creditService = {
     return authed<CreditTransaction[]>("/admin/credit/transactions");
   },
 
-  async adjust(userId: string, type: "add" | "remove", amount: number, note: string): Promise<void> {
-    await authed<void>(`/admin/users/${encodeURIComponent(userId)}/credit`, json({ type, amount, note }));
+  async adjust(
+    userId: string,
+    type: "add" | "remove",
+    amount: number,
+    note: string,
+  ): Promise<void> {
+    await authed<void>(
+      `/admin/users/${encodeURIComponent(userId)}/credit`,
+      json({ type, amount, note }),
+    );
   },
 };
 
@@ -247,7 +349,10 @@ export const notificationService = {
   },
 
   async markRead(id: string): Promise<void> {
-    await authed<void>(`/notifications/${encodeURIComponent(id)}/read`, patch());
+    await authed<void>(
+      `/notifications/${encodeURIComponent(id)}/read`,
+      patch(),
+    );
   },
 
   async markAllRead(): Promise<void> {
@@ -262,8 +367,14 @@ export const contentService = {
     return apiRequest<CmsContent[]>("/content");
   },
 
-  async updateContent(id: string, value: CmsContent["value"]): Promise<CmsContent> {
-    return authed<CmsContent>(`/admin/content/${encodeURIComponent(id)}`, put({ value }));
+  async updateContent(
+    id: string,
+    value: CmsContent["value"],
+  ): Promise<CmsContent> {
+    return authed<CmsContent>(
+      `/admin/content/${encodeURIComponent(id)}`,
+      put({ value }),
+    );
   },
 
   // Public: published announcements
@@ -276,16 +387,30 @@ export const contentService = {
     return authed<Announcement[]>("/admin/announcements");
   },
 
-  async createAnnouncement(data: Omit<Announcement, "id" | "createdAt">): Promise<Announcement> {
-    return authed<Announcement>("/admin/announcements", json(data));
+  async createAnnouncement(
+    data: Omit<Announcement, "id" | "createdAt">,
+  ): Promise<Announcement> {
+    return authed<Announcement>(
+      "/admin/announcements",
+      json(data),
+    );
   },
 
-  async updateAnnouncement(id: string, data: Partial<Announcement>): Promise<Announcement> {
-    return authed<Announcement>(`/admin/announcements/${encodeURIComponent(id)}`, put(data));
+  async updateAnnouncement(
+    id: string,
+    data: Partial<Announcement>,
+  ): Promise<Announcement> {
+    return authed<Announcement>(
+      `/admin/announcements/${encodeURIComponent(id)}`,
+      put(data),
+    );
   },
 
   async deleteAnnouncement(id: string): Promise<void> {
-    await authed<void>(`/admin/announcements/${encodeURIComponent(id)}`, { method: "DELETE" });
+    await authed<void>(
+      `/admin/announcements/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
   },
 };
 
